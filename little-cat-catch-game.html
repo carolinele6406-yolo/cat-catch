@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Cat Catch: design your cat, pick a setting, and catch one falling fish at a time.">
+<title>Cat Catch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Nunito:wght@500;700;800&family=DM+Mono:wght@500&display=swap">
+<style>
+/* Layout: game column (stats, scene canvas, pads) beside a "Make your cat" panel; stacks on phones */
+:root{
+  --bg:#dff1f2; --panel:#ffffff; --ink:#173a45; --muted:#5b7b84;
+  --line:#a8d6db; --chip:#eef7f8;
+  --accent:#f0794d; --accent-ink:#ffffff;
+  --display:"Bagel Fat One","Arial Rounded MT Bold",system-ui,sans-serif;
+  --body:"Nunito",system-ui,-apple-system,sans-serif;
+  --mono:"DM Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1d26; --panel:#142a35; --ink:#e3f2f4; --muted:#8fb0b8;
+  --line:#24505f; --chip:#1b3644;
+  --accent:#ff8a5c; --accent-ink:#1a0e08; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1d26; --panel:#142a35; --ink:#e3f2f4; --muted:#8fb0b8;
+  --line:#24505f; --chip:#1b3644;
+  --accent:#ff8a5c; --accent-ink:#1a0e08; color-scheme:dark}
+
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);padding-inline:16px;padding-block:20px;box-sizing:border-box;min-height:100%}
+*,*::before,*::after{box-sizing:border-box}
+.wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:400;font-size:2.1rem;margin:0;letter-spacing:.01em}
+h1 span{color:var(--accent)}
+.tag{color:var(--muted);font-size:.9rem;margin:0}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:20px;align-items:start}
+@media (max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}}
+.layout.playing{grid-template-columns:minmax(0,820px);justify-content:center}
+.game{display:flex;flex-direction:column;gap:12px;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--panel);border-radius:12px;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.stat b{font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800}
+.stat output{font-family:var(--mono);font-size:1.35rem;font-variant-numeric:tabular-nums}
+.pond{position:relative;border-radius:18px;overflow:hidden;border:2px solid var(--line);aspect-ratio:6/5;width:min(100%, calc((100dvh - 250px) * 1.2));max-width:100%;margin-inline:auto;touch-action:none}
+canvas#c{display:block;width:100%;height:100%}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(2px)}
+.overlay h2{font-family:var(--display);font-weight:400;font-size:1.9rem;margin:0;text-wrap:balance}
+.overlay p{margin:0;color:var(--muted);max-width:30ch;line-height:1.45}
+.overlay .big{font-family:var(--mono);font-size:1rem;color:var(--ink)}
+.newbest{color:var(--accent);font-weight:800}
+button{font:inherit;cursor:pointer;border:0;color:inherit}
+.play{background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:1.05rem;padding:12px 28px;border-radius:999px}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pad{background:var(--panel);font-size:1.6rem;padding:12px;border-radius:14px;border:2px solid var(--line);user-select:none;-webkit-user-select:none;touch-action:none}
+.pad:active{background:var(--line)}
+.hint{color:var(--muted);font-size:.85rem;text-align:center;margin:0}
+kbd{font-family:var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+
+/* Customizer */
+.maker{background:var(--panel);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.maker-head{display:flex;align-items:center;gap:14px}
+.maker-head h2{font-family:var(--display);font-weight:400;font-size:1.4rem;margin:0}
+.maker-head p{margin:2px 0 0;color:var(--muted);font-size:.85rem}
+#preview{width:96px;height:96px;border-radius:14px;border:2px solid var(--line);flex:none}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;min-width:0}
+legend{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--muted);padding:0;margin-bottom:8px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--chip);border:2px solid transparent;border-radius:999px;padding:6px 12px;font-weight:700;font-size:.88rem;display:inline-flex;align-items:center;gap:7px}
+.chip[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--chip))}
+.dot{width:16px;height:16px;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--ink) 35%,transparent);flex:none}
+.scene-sw{width:22px;height:16px;border-radius:5px;flex:none}
+.random{align-self:flex-start;background:transparent;border:2px dashed var(--line);border-radius:999px;padding:6px 14px;font-weight:700;font-size:.85rem;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Cat <span>Catch</span></h1>
+    <p class="tag">Don't let a single fish get away.</p>
+  </header>
+
+  <div class="layout" id="layout">
+    <section class="game">
+      <div class="stats">
+        <div class="stat"><b>Fish / Level</b><output id="fish">0</output></div>
+        <div class="stat"><b>Timer</b><output id="timer">0.0s</output></div>
+        <div class="stat"><b>Best</b><output id="best">0</output></div>
+      </div>
+
+      <div class="pond" id="pond">
+        <canvas id="c" aria-label="Game area"></canvas>
+        <div class="overlay" id="overlay">
+          <h2 id="ovTitle">Ready, kitty?</h2>
+          <p id="ovText">One fish drops at a time. Every catch makes the next one fall faster. Miss once and the round is over.</p>
+          <p class="big" id="ovScore" hidden></p>
+          <button class="play" id="playBtn">Start</button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="pad" id="leftBtn" aria-label="Move left">◀</button>
+        <button class="pad" id="rightBtn" aria-label="Move right">▶</button>
+      </div>
+      <p class="hint">Use <kbd>←</kbd> <kbd>→</kbd> to move · <kbd>Space</kbd> to start · or drag on the scene</p>
+    </section>
+
+    <aside class="maker" id="maker" aria-label="Customize your cat and scene">
+      <div class="maker-head">
+        <canvas id="preview" width="192" height="192" aria-hidden="true"></canvas>
+        <div>
+          <h2>Make your cat</h2>
+          <p>Pick a look and a place to play. Your choices are saved.</p>
+        </div>
+      </div>
+      <fieldset><legend>Fur</legend><div class="opts" id="opt-fur"></div></fieldset>
+      <fieldset><legend>Eyes</legend><div class="opts" id="opt-eyes"></div></fieldset>
+      <fieldset><legend>Accessory</legend><div class="opts" id="opt-acc"></div></fieldset>
+      <fieldset><legend>Setting</legend><div class="opts" id="opt-scene"></div></fieldset>
+      <button class="random" id="randomBtn">Surprise me</button>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const canvas = $('c'), ctx = canvas.getContext('2d');
+  const pv = $('preview'), pctx = pv.getContext('2d');
+  const pond = $('pond');
+  const fishOut = $('fish'), timerOut = $('timer'), bestOut = $('best');
+  const overlay = $('overlay'), ovTitle = $('ovTitle'), ovText = $('ovText'), ovScore = $('ovScore'), playBtn = $('playBtn');
+
+  const W = 480, H = 400;
+  const CAT_SIZE = 50, FISH_SIZE = 30;
+  const CAT_Y = H - 58;            // center of the cat's head
+  const GROUND_Y = CAT_Y + 26;
+
+  /* ---------- Options ---------- */
+  const FURS = {
+    ginger:  { label:'Ginger',  base:'#f2a65a', accent:'#d9782f', line:'#5a2f17', stripes:true },
+    gray:    { label:'Gray',    base:'#a3acb5', accent:'#7d8791', line:'#2f363d', stripes:true },
+    black:   { label:'Black',   base:'#2c2b33', accent:'#1d1c22', line:'#0e0d12', whisker:'#d8d8de' },
+    snow:    { label:'Snow',    base:'#f7f4ef', accent:'#e2dcd2', line:'#5b5550' },
+    calico:  { label:'Calico',  base:'#f7f1e8', accent:'#e08a3c', accent2:'#3a3330', line:'#4a3a30', patches:true },
+    siamese: { label:'Siamese', base:'#f1e4cf', accent:'#6b4a36', line:'#3d2a1e', points:true },
+  };
+  const EYES = {
+    green: { label:'Green', color:'#5fbf6a' },
+    blue:  { label:'Blue',  color:'#5aa7e8' },
+    amber: { label:'Amber', color:'#f2b632' },
+    odd:   { label:'Odd-eyed', color:'#5aa7e8', color2:'#f2b632' },
+  };
+  const ACCS = {
+    none:  { label:'None' },
+    bow:   { label:'Bow' },
+    hat:   { label:'Party hat' },
+    shades:{ label:'Shades' },
+    crown: { label:'Crown' },
+    scarf: { label:'Scarf' },
+  };
+  const SCENES = {
+    pond:    { label:'Pond',     swatch:'linear-gradient(#bfe6ea,#5fb0bc)' },
+    beach:   { label:'Sunset beach', swatch:'linear-gradient(#6a5797,#ff8e72 60%,#f2d29b)' },
+    night:   { label:'Rooftop night', swatch:'linear-gradient(#0f1630,#2f3a72)' },
+    snow:    { label:'Snowy woods', swatch:'linear-gradient(#cfe0f0,#ffffff)' },
+    kitchen: { label:'Kitchen',  swatch:'linear-gradient(#fbf1e2,#c98b5e)' },
+  };
+
+  let look = { fur:'ginger', eyes:'green', acc:'none', scene:'pond' };
+  try {
+    const saved = JSON.parse(localStorage.getItem('catCatchLook') || 'null');
+    if (saved) for (const k in look) if (saved[k]) look[k] = saved[k];
+  } catch (e) {}
+  if (!FURS[look.fur]) look.fur='ginger';
+  if (!EYES[look.eyes]) look.eyes='green';
+  if (!ACCS[look.acc]) look.acc='none';
+  if (!SCENES[look.scene]) look.scene='pond';
+
+  /* ---------- Build the option chips ---------- */
+  function buildOpts(boxId, key, table, decorate){
+    const box = $(boxId);
+    for (const id in table){
+      const b = document.createElement('button');
+      b.className = 'chip'; b.type = 'button'; b.id = `${key}-${id}`;
+      b.setAttribute('aria-pressed', look[key] === id);
+      if (decorate) b.appendChild(decorate(table[id]));
+      b.appendChild(document.createTextNode(table[id].label));
+      b.addEventListener('click', () => { setLook(key, id); });
+      box.appendChild(b);
+    }
+  }
+  const dot = c => { const s = document.createElement('span'); s.className='dot'; s.style.background=c; return s; };
+  buildOpts('opt-fur','fur',FURS, f => dot(f.patches ? `conic-gradient(${f.base} 0 40%, ${f.accent} 0 70%, ${f.accent2} 0)` : f.points ? `radial-gradient(${f.base} 45%, ${f.accent} 46%)` : f.base));
+  buildOpts('opt-eyes','eyes',EYES, e => dot(e.color2 ? `linear-gradient(90deg, ${e.color} 50%, ${e.color2} 50%)` : e.color));
+  buildOpts('opt-acc','acc',ACCS);
+  buildOpts('opt-scene','scene',SCENES, s => { const e=document.createElement('span'); e.className='scene-sw'; e.style.background=s.swatch; return e; });
+
+  function setLook(key, id){
+    look[key] = id;
+    document.querySelectorAll(`[id^="${key}-"]`).forEach(b => b.setAttribute('aria-pressed', b.id === `${key}-${id}`));
+    try { localStorage.setItem('catCatchLook', JSON.stringify(look)); } catch (e) {}
+    drawPreview(); if (state !== 'playing') draw();
+  }
+  $('randomBtn').addEventListener('click', () => {
+    const pick = t => { const k = Object.keys(t); return k[Math.floor(Math.random()*k.length)]; };
+    setLook('fur', pick(FURS)); setLook('eyes', pick(EYES)); setLook('acc', pick(ACCS)); setLook('scene', pick(SCENES));
+  });
+
+  /* ---------- Drawing helpers ---------- */
+  function ell(g, x, y, rx, ry){ g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); }
+
+  function drawCat(g, x, y, s, o){
+    const f = FURS[o.fur], ey = EYES[o.eyes], r = s * 0.42;
+    g.save(); g.translate(x, y);
+    g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = 2; g.strokeStyle = f.line;
+
+    // tail
+    g.beginPath(); g.moveTo(r*0.6, r*1.3); g.quadraticCurveTo(r*1.7, r*1.25, r*1.35, r*0.35);
+    g.lineWidth = r*0.3; g.strokeStyle = f.line; g.stroke();
+    g.lineWidth = r*0.3 - 4; g.strokeStyle = f.points ? f.accent : f.base; g.stroke();
+    g.lineWidth = 2; g.strokeStyle = f.line;
+
+    // body
+    g.fillStyle = f.base; ell(g, 0, r*1.05, r*0.82, r*0.55); g.fill(); g.stroke();
+    if (f.patches){ g.save(); ell(g,0,r*1.05,r*0.82,r*0.55); g.clip(); g.fillStyle=f.accent; ell(g,-r*0.5,r*1.2,r*0.4,r*0.3); g.fill(); g.fillStyle=f.accent2; ell(g,r*0.45,r*0.95,r*0.3,r*0.25); g.fill(); g.restore(); }
+    // paws
+    g.fillStyle = f.points ? f.accent : f.base;
+    for (const sx of [-1,1]){ ell(g, sx*r*0.38, r*1.52, r*0.22, r*0.14); g.fill(); g.stroke(); }
+
+    // ears
+    for (const sx of [-1,1]){
+      g.beginPath(); g.moveTo(sx*r*0.92, -r*0.2); g.lineTo(sx*r*0.78, -r*1.18); g.lineTo(sx*r*0.18, -r*0.82); g.closePath();
+      g.fillStyle = (f.points || (f.patches && sx<0)) ? (f.patches ? f.accent : f.accent) : (f.patches ? f.accent2 : f.base);
+      if (!f.points && !f.patches) g.fillStyle = f.base;
+      g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(sx*r*0.78, -r*0.42); g.lineTo(sx*r*0.72, -r*0.95); g.lineTo(sx*r*0.38, -r*0.75); g.closePath();
+      g.fillStyle = '#f4a5b0'; g.fill();
+    }
+
+    // head
+    g.fillStyle = f.base; ell(g, 0, 0, r, r*0.92); g.fill();
+    g.save(); ell(g, 0, 0, r, r*0.92); g.clip();
+    if (f.stripes){ g.strokeStyle=f.accent; g.lineWidth=r*0.1; for (const dx of [-0.25,0,0.25]){ g.beginPath(); g.moveTo(dx*r,-r*0.9); g.lineTo(dx*r*0.8,-r*0.55); g.stroke(); } for (const sx of [-1,1]){ g.beginPath(); g.moveTo(sx*r,-r*0.05); g.lineTo(sx*r*0.72,0); g.moveTo(sx*r,r*0.18); g.lineTo(sx*r*0.74,r*0.2); g.stroke(); } }
+    if (f.patches){ g.fillStyle=f.accent; ell(g,-r*0.55,-r*0.45,r*0.5,r*0.45); g.fill(); g.fillStyle=f.accent2; ell(g,r*0.6,-r*0.5,r*0.42,r*0.4); g.fill(); }
+    if (f.points){ g.fillStyle=f.accent; g.globalAlpha=0.85; ell(g,0,r*0.3,r*0.5,r*0.42); g.fill(); g.globalAlpha=1; }
+    g.restore();
+    g.lineWidth = 2; g.strokeStyle = f.line; ell(g, 0, 0, r, r*0.92); g.stroke();
+
+    // eyes
+    const eyeY = -r*0.08;
+    for (const sx of [-1,1]){
+      const col = (ey.color2 && sx>0) ? ey.color2 : ey.color;
+      g.fillStyle = col; ell(g, sx*r*0.38, eyeY, r*0.17, r*0.2); g.fill();
+      g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = '#111'; ell(g, sx*r*0.38, eyeY, r*0.06, r*0.15); g.fill();
+      g.fillStyle = '#fff'; ell(g, sx*r*0.38 + r*0.06, eyeY - r*0.08, r*0.045, r*0.045); g.fill();
+    }
+    // nose + mouth
+    g.fillStyle = '#e97a8c';
+    g.beginPath(); g.moveTo(-r*0.09, r*0.2); g.lineTo(r*0.09, r*0.2); g.lineTo(0, r*0.31); g.closePath(); g.fill();
+    g.strokeStyle = f.whisker || f.line; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(0, r*0.31); g.quadraticCurveTo(-r*0.08, r*0.44, -r*0.18, r*0.36);
+    g.moveTo(0, r*0.31); g.quadraticCurveTo(r*0.08, r*0.44, r*0.18, r*0.36); g.stroke();
+    // whiskers
+    g.lineWidth = 1.1; g.globalAlpha = 0.8;
+    for (const sx of [-1,1]) for (const dy of [-0.04, 0.1]){
+      g.beginPath(); g.moveTo(sx*r*0.3, r*(0.28+dy*0.5)); g.lineTo(sx*r*1.15, r*(0.18+dy*1.6)); g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    drawAcc(g, r, o.acc);
+    g.restore();
+  }
+
+  function drawAcc(g, r, a){
+    g.lineWidth = 1.5; g.strokeStyle = '#2a2224';
+    if (a === 'bow'){
+      g.save(); g.translate(r*0.5, -r*0.8); g.rotate(0.35);
+      g.fillStyle = '#ef5b7a';
+      g.beginPath(); g.moveTo(0,0); g.lineTo(-r*0.38,-r*0.22); g.lineTo(-r*0.38,r*0.22); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(0,0); g.lineTo(r*0.38,-r*0.22); g.lineTo(r*0.38,r*0.22); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#c93a5a'; ell(g,0,0,r*0.1,r*0.1); g.fill(); g.stroke();
+      g.restore();
+    } else if (a === 'hat'){
+      g.save();
+      g.beginPath(); g.moveTo(-r*0.38,-r*0.78); g.lineTo(r*0.38,-r*0.78); g.lineTo(r*0.05,-r*1.85); g.closePath();
+      g.fillStyle = '#5aa7e8'; g.fill();
+      g.clip();
+      g.fillStyle = '#ffd34d';
+      for (let i=0;i<4;i++){ g.beginPath(); g.ellipse(0, -r*(0.9+i*0.28), r*0.6, r*0.06, -0.2, 0, Math.PI*2); g.fill(); }
+      g.restore();
+      g.beginPath(); g.moveTo(-r*0.38,-r*0.78); g.lineTo(r*0.38,-r*0.78); g.lineTo(r*0.05,-r*1.85); g.closePath(); g.stroke();
+      g.fillStyle = '#ef5b7a'; ell(g, r*0.05, -r*1.88, r*0.13, r*0.13); g.fill(); g.stroke();
+    } else if (a === 'shades'){
+      g.fillStyle = '#1b1b22';
+      for (const sx of [-1,1]){ g.beginPath(); g.roundRect(sx*r*0.38 - r*0.27, -r*0.25, r*0.54, r*0.33, r*0.12); g.fill(); }
+      g.strokeStyle = '#1b1b22'; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(-r*0.11,-r*0.15); g.lineTo(r*0.11,-r*0.15); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.5;
+      for (const sx of [-1,1]){ g.beginPath(); g.moveTo(sx*r*0.38 - r*0.15, -r*0.17); g.lineTo(sx*r*0.38 - r*0.05, -r*0.17); g.stroke(); }
+    } else if (a === 'crown'){
+      g.fillStyle = '#f5c542';
+      g.beginPath();
+      g.moveTo(-r*0.42,-r*0.82); g.lineTo(-r*0.46,-r*1.25); g.lineTo(-r*0.22,-r*1.02); g.lineTo(0,-r*1.38);
+      g.lineTo(r*0.22,-r*1.02); g.lineTo(r*0.46,-r*1.25); g.lineTo(r*0.42,-r*0.82); g.closePath();
+      g.fill(); g.stroke();
+      g.fillStyle = '#e8456b'; ell(g,0,-r*0.95,r*0.07,r*0.07); g.fill();
+      g.fillStyle = '#4fb3e8'; ell(g,-r*0.26,-r*0.92,r*0.05,r*0.05); g.fill(); ell(g,r*0.26,-r*0.92,r*0.05,r*0.05); g.fill();
+    } else if (a === 'scarf'){
+      g.fillStyle = '#d9483b';
+      g.beginPath(); g.roundRect(-r*0.78, r*0.66, r*1.56, r*0.26, r*0.13); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(r*0.25, r*0.85); g.lineTo(r*0.55, r*0.85); g.lineTo(r*0.6, r*1.45); g.lineTo(r*0.3, r*1.4); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = '#f5f0e8'; g.lineWidth = 2;
+      for (const dx of [-0.45,-0.1]){ g.beginPath(); g.moveTo(r*dx, r*0.68); g.lineTo(r*(dx+0.12), r*0.9); g.stroke(); }
+    }
+  }
+
+  // Fixed random layouts for scene details
+  const rand = (() => { let s = 7; return () => (s = (s*16807) % 2147483647) / 2147483647; })();
+  const STARS = Array.from({length:45}, () => ({ x: rand()*W, y: rand()*H*0.75, r: 0.6 + rand()*1.4, p: rand()*6 }));
+  const FLAKES = Array.from({length:55}, () => ({ x: rand()*W, y: rand()*H, r: 1 + rand()*2.4, v: 18 + rand()*30, d: rand()*6 }));
+  const BUBBLES = Array.from({length:14}, () => ({ x: rand()*W, y: rand()*H, r: 2 + rand()*4, v: 10 + rand()*16 }));
+
+  function drawScene(g, scene, t){
+    const grad = (stops) => { const lg = g.createLinearGradient(0,0,0,H); stops.forEach(([p,c]) => lg.addColorStop(p,c)); return lg; };
+    if (scene === 'pond'){
+      g.fillStyle = grad([[0,'#c9eef1'],[1,'#5fb0bc']]); g.fillRect(0,0,W,H);
+      g.strokeStyle = 'rgba(255,255,255,.45)'; g.lineWidth = 1.5;
+      for (let i=1;i<=5;i++){ const y=i*58; g.beginPath(); for(let x=0;x<=W;x+=10) g.lineTo(x, y+Math.sin(x/28+t+i)*4); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.35)';
+      BUBBLES.forEach(b => { const y = ((b.y - t*b.v) % H + H) % H; ell(g, b.x + Math.sin(t+b.y)*3, y, b.r, b.r); g.fill(); });
+      // lily pads
+      g.fillStyle = '#4f9d5a';
+      [[40,90],[410,140],[95,250],[320,235]].forEach(([x,y]) => { g.beginPath(); g.moveTo(x,y); g.arc(x,y,14,0.4,Math.PI*2-0.1); g.closePath(); g.fill(); });
+      // wooden dock
+      g.fillStyle = '#a8724a'; g.fillRect(0, GROUND_Y, W, H-GROUND_Y);
+      g.strokeStyle = '#7d5133'; g.lineWidth = 2;
+      for (let x=0;x<W;x+=38){ g.beginPath(); g.moveTo(x,GROUND_Y); g.lineTo(x,H); g.stroke(); }
+      g.fillStyle = '#c48b5f'; g.fillRect(0, GROUND_Y, W, 5);
+    } else if (scene === 'beach'){
+      g.fillStyle = grad([[0,'#5d4d8e'],[0.45,'#ff8e72'],[0.7,'#ffc79a']]); g.fillRect(0,0,W,H);
+      g.fillStyle = '#ffe08a'; ell(g, W*0.68, H*0.52, 42, 42); g.fill();
+      g.fillStyle = '#4b7fb0'; g.fillRect(0, H*0.6, W, GROUND_Y - H*0.6);
+      g.strokeStyle = 'rgba(255,224,138,.6)'; g.lineWidth = 2;
+      for (let i=0;i<6;i++){ const y = H*0.62 + i*9; const w = 60 - i*6; g.beginPath(); g.moveTo(W*0.68 - w/2 + Math.sin(t*1.5+i)*4, y); g.lineTo(W*0.68 + w/2 + Math.sin(t*1.5+i)*4, y); g.stroke(); }
+      // gulls
+      g.strokeStyle = 'rgba(40,30,60,.6)'; g.lineWidth = 1.6;
+      [[60,90],[95,70],[220,110]].forEach(([x,y],i) => { const dx = (x + t*12*(i+1)) % (W+40) - 20; g.beginPath(); g.moveTo(dx-7,y); g.quadraticCurveTo(dx-3,y-5,dx,y); g.quadraticCurveTo(dx+3,y-5,dx+7,y); g.stroke(); });
+      g.fillStyle = '#f2d29b'; g.fillRect(0, GROUND_Y, W, H-GROUND_Y);
+      g.fillStyle = '#fff6e0'; g.beginPath(); for (let x=0;x<=W;x+=8) g.lineTo(x, GROUND_Y + Math.sin(x/20 + t*2)*2); g.lineTo(W,GROUND_Y-3); g.lineTo(0,GROUND_Y-3); g.fill();
+      g.fillStyle = '#e8bf80'; [[30,H-8],[140,H-14],[265,H-6],[410,H-11]].forEach(([x,y]) => { ell(g,x,y,5,2.5); g.fill(); });
+    } else if (scene === 'night'){
+      g.fillStyle = grad([[0,'#0b1028'],[1,'#2f3a72']]); g.fillRect(0,0,W,H);
+      STARS.forEach(s => { g.globalAlpha = 0.45 + 0.55*Math.abs(Math.sin(t*1.3 + s.p)); g.fillStyle = '#fff8dc'; ell(g, s.x, s.y, s.r, s.r); g.fill(); });
+      g.globalAlpha = 1;
+      g.fillStyle = '#fff3c4'; ell(g, 62, 70, 26, 26); g.fill();
+      g.fillStyle = '#0d1430'; ell(g, 74, 62, 24, 24); g.fill();
+      // skyline
+      g.fillStyle = '#1a2148';
+      [[0,250,40],[40,230,30],[70,265,45],[115,215,35],[150,245,50],[200,225,30],[230,255,40],[270,235,30],[300,205,40],[340,250,35],[375,228,45],[420,260,30],[450,238,30]].forEach(([x,y,w]) => g.fillRect(x, y, w, GROUND_Y - y));
+      g.fillStyle = '#f7d36a';
+      [[10,262],[22,280],[48,242],[82,278],[96,295],[124,228],[132,260],[162,258],[180,280],[210,240],[244,268],[280,250],[312,220],[324,262],[352,270],[388,240],[400,285],[430,272],[460,250]].forEach(([x,y]) => g.fillRect(x, y, 5, 6));
+      // rooftop
+      g.fillStyle = '#454a66'; g.fillRect(0, GROUND_Y, W, H-GROUND_Y);
+      g.fillStyle = '#5a5f80'; g.fillRect(0, GROUND_Y, W, 5);
+    } else if (scene === 'snow'){
+      g.fillStyle = grad([[0,'#c7dcef'],[1,'#f4f9ff']]); g.fillRect(0,0,W,H);
+      // hills + pines
+      g.fillStyle = '#e3edf7'; ell(g, 70, GROUND_Y+20, 150, 70); g.fill(); ell(g, 260, GROUND_Y+30, 140, 80); g.fill(); ell(g, 430, GROUND_Y+22, 130, 72); g.fill();
+      g.fillStyle = '#3f7a62';
+      [[30,250,1],[75,230,1.3],[230,240,1.1],[275,262,0.9],[390,236,1.2],[440,258,1]].forEach(([x,y,s]) => {
+        for (let i=0;i<3;i++){ g.beginPath(); g.moveTo(x, y + i*16*s - 20*s); g.lineTo(x-18*s+i*2, y + i*16*s + 12*s); g.lineTo(x+18*s-i*2, y + i*16*s + 12*s); g.closePath(); g.fill(); }
+      });
+      g.fillStyle = '#ffffff';
+      FLAKES.forEach(f => { const y = (f.y + t*f.v) % H; ell(g, f.x + Math.sin(t + f.d)*8, y, f.r, f.r); g.fill(); });
+      g.fillStyle = '#ffffff'; g.fillRect(0, GROUND_Y, W, H-GROUND_Y);
+      g.fillStyle = '#dbe7f3'; g.fillRect(0, GROUND_Y, W, 3);
+    } else if (scene === 'kitchen'){
+      g.fillStyle = '#fbf1e2'; g.fillRect(0,0,W,H);
+      g.strokeStyle = '#ecdcc4'; g.lineWidth = 1.5;
+      for (let x=0;x<=W;x+=30){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,GROUND_Y); g.stroke(); }
+      for (let y=0;y<=GROUND_Y;y+=30){ g.beginPath(); g.moveTo(0,y); g.lineTo(W,y); g.stroke(); }
+      // window
+      g.fillStyle = '#bfe3f2'; g.fillRect(300, 40, 120, 90);
+      g.strokeStyle = '#d8b48a'; g.lineWidth = 6; g.strokeRect(300, 40, 120, 90);
+      g.lineWidth = 3; g.beginPath(); g.moveTo(360,40); g.lineTo(360,130); g.moveTo(300,85); g.lineTo(420,85); g.stroke();
+      g.fillStyle = '#ffffff'; ell(g, 330 + Math.sin(t*0.3)*10, 62, 12, 5); g.fill();
+      // hanging pans
+      g.strokeStyle = '#8a6a50'; g.lineWidth = 2;
+      [[40,30],[90,30]].forEach(([x,y],i) => { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y+30); g.stroke(); g.fillStyle = i ? '#3d3a3a' : '#c46b45'; ell(g, x, y+48, 16, 16); g.fill(); });
+      // fish bowl on shelf
+      g.fillStyle = '#d8b48a'; g.fillRect(20, 160, 90, 6);
+      g.fillStyle = 'rgba(140,200,230,.6)'; ell(g, 60, 145, 16, 15); g.fill();
+      // counter
+      g.fillStyle = '#c98b5e'; g.fillRect(0, GROUND_Y, W, H-GROUND_Y);
+      g.fillStyle = '#e8e0d3'; g.fillRect(0, GROUND_Y, W, 7);
+      g.strokeStyle = '#a86f48'; g.lineWidth = 2;
+      for (let x=75;x<W;x+=75){ g.beginPath(); g.moveTo(x, GROUND_Y+7); g.lineTo(x, H); g.stroke(); }
+    }
+  }
+
+  /* ---------- Game ---------- */
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('catCatchBest') || '0', 10) || 0; } catch (e) {}
+  bestOut.textContent = best;
+
+  let state = 'idle';
+  let cat = { x: W/2 }, fish = null, caught = 0, speed = 90, startTime = 0, elapsed = 0, lastT = 0, keys = {}, dragX = null, pops = [];
+
+  function resize(){
+    const dpr = window.devicePixelRatio || 1;
+    const r = pond.getBoundingClientRect();
+    canvas.width = Math.max(1, r.width * dpr); canvas.height = Math.max(1, r.height * dpr);
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    draw();
+  }
+  function newFish(){ fish = { x: 24 + Math.random()*(W-48), y: -FISH_SIZE, wob: Math.random()*6 }; }
+  function reset(){
+    cat = { x: W/2 }; caught = 0; speed = 90; elapsed = 0; pops = [];
+    newFish(); fishOut.textContent = '0'; timerOut.textContent = '0.0s';
+  }
+  function start(){
+    reset(); state = 'playing'; overlay.hidden = true;
+    $('maker').hidden = true; $('layout').classList.add('playing');
+    startTime = performance.now(); lastT = startTime;
+    requestAnimationFrame(loop);
+  }
+  function gameOver(){
+    state = 'over';
+    $('maker').hidden = false; $('layout').classList.remove('playing');
+    let isBest = false;
+    if (caught > best){ best = caught; isBest = true; try { localStorage.setItem('catCatchBest', String(best)); } catch (e) {} bestOut.textContent = best; }
+    ovTitle.textContent = 'It got away!';
+    ovText.innerHTML = isBest && caught > 0 ? '<span class="newbest">New high score!</span>' : `Your best is ${best} fish.`;
+    ovScore.hidden = false;
+    ovScore.textContent = `${caught} fish · level ${caught} · ${elapsed.toFixed(1)}s`;
+    playBtn.textContent = 'Play again';
+    overlay.hidden = false;
+    playBtn.focus({ preventScroll: true });
+    idleLoop();
+  }
+
+  function loop(t){
+    if (state !== 'playing') return;
+    const dt = Math.min((t - lastT)/1000, 0.05); lastT = t;
+    elapsed = (t - startTime)/1000;
+    timerOut.textContent = elapsed.toFixed(1) + 's';
+
+    const catSpeed = 310 + caught*8;
+    let dir = (keys.ArrowRight || keys.right ? 1 : 0) - (keys.ArrowLeft || keys.left ? 1 : 0);
+    if (dragX !== null && !dir){ const d = dragX - cat.x; if (Math.abs(d) > 3) dir = Math.sign(d) * Math.min(1, Math.abs(d)/20); }
+    cat.x = Math.max(CAT_SIZE/2, Math.min(W - CAT_SIZE/2, cat.x + dir*catSpeed*dt));
+
+    fish.y += speed*dt; fish.wob += dt*6;
+    const reach = (CAT_SIZE + FISH_SIZE)/2 - 6;
+    if (fish.y >= CAT_Y - 28 && fish.y <= CAT_Y + 10 && Math.abs(fish.x - cat.x) < reach){
+      caught++; fishOut.textContent = caught;
+      speed = 90 + caught*18 + Math.pow(caught, 1.35)*4;
+      pops.push({ x: cat.x, y: CAT_Y - 34, life: 0.6 });
+      newFish();
+    } else if (fish.y > GROUND_Y + 6){
+      draw(t/1000); return gameOver();
+    }
+    pops = pops.filter(p => (p.life -= dt) > 0);
+    draw(t/1000);
+    requestAnimationFrame(loop);
+  }
+
+  function draw(t = performance.now()/1000){
+    drawScene(ctx, look.scene, t);
+    if (fish && state === 'playing'){
+      ctx.save(); ctx.translate(fish.x, fish.y); ctx.rotate(Math.sin(fish.wob)*0.25);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = FISH_SIZE + 'px serif';
+      ctx.fillText('🐟', 0, 0); ctx.restore();
+    }
+    drawCat(ctx, cat.x, CAT_Y, CAT_SIZE, look);
+    pops.forEach(p => {
+      ctx.globalAlpha = p.life/0.6; ctx.fillStyle = '#ff7a45'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+      ctx.font = '800 18px Nunito, sans-serif'; ctx.textAlign = 'center';
+      const y = p.y - (0.6 - p.life)*40; ctx.strokeText('+1', p.x, y); ctx.fillText('+1', p.x, y);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPreview(){
+    const S = pv.width;
+    pctx.setTransform(S/120, 0, 0, S/120, 0, 0);
+    // show a zoomed slice of the chosen scene behind the cat
+    pctx.save(); pctx.translate(-(W/2 - 60), -(GROUND_Y - 92)); drawScene(pctx, look.scene, performance.now()/1000); pctx.restore();
+    drawCat(pctx, 60, 64, 62, look);
+  }
+
+  // Gentle ambient animation while not playing (waves, snow, stars)
+  let idleRaf = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function idleLoop(){
+    if (idleRaf) cancelAnimationFrame(idleRaf);
+    const step = () => { if (state === 'playing') { idleRaf = null; return; } draw(); drawPreview(); idleRaf = reduce ? null : requestAnimationFrame(step); };
+    step();
+  }
+
+  /* ---------- Input ---------- */
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){ keys[e.key] = true; if (state === 'playing') e.preventDefault(); }
+    const onButton = document.activeElement && document.activeElement.tagName === 'BUTTON';
+    if ((e.key === ' ' || e.key === 'Enter') && state !== 'playing' && !onButton){ e.preventDefault(); start(); }
+  });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
+  window.addEventListener('blur', () => { keys = {}; });
+  function hold(btn, k){
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); keys[k] = true; });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev => btn.addEventListener(ev, () => { keys[k] = false; }));
+  }
+  hold($('leftBtn'),'left'); hold($('rightBtn'),'right');
+  const toX = e => { const r = pond.getBoundingClientRect(); return (e.clientX - r.left)/r.width*W; };
+  canvas.addEventListener('pointerdown', e => { dragX = toX(e); canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => { if (dragX !== null) dragX = toX(e); });
+  ['pointerup','pointercancel'].forEach(ev => canvas.addEventListener(ev, () => { dragX = null; }));
+
+  playBtn.addEventListener('click', start);
+  window.addEventListener('resize', resize);
+  document.fonts?.ready.then(() => draw());
+  resize(); drawPreview(); idleLoop();
+})();
+</script>
+</body>
+</html>
